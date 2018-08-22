@@ -7,5 +7,7 @@
   tags:
     - step007
   roles:
+    - role: "{{ ANSIBLE_REPO_PATH }}/roles/install-rhsso"
+      when: sso_required
     - role: "{{ ANSIBLE_REPO_PATH }}/roles/{{ocp_workload}}"
       when: ocp_workload is defined
