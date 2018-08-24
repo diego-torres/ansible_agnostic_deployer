@@ -14,19 +14,16 @@
 
 - name: Initialize the project templates, {{pam_template_yml}}
   shell: "oc create -f {{pam_template_yml}} -n {{ocp_project}}"
-- shell: "oc create -f {{pam_secrets_yml}} -n {{ocp_project}}"
+- name: Initialize the project secrets, {{pam_secrets_yml}}
+  shell: "oc create -f {{pam_secrets_yml}} -n {{ocp_project}}"
 
 - name: Prep local filesystem for temp files
   file:
     path: "/tmp/{{guid}}"
     state: directory
 
-- name: Copy pam imagestream using the following tag,  {{pam_tag}}
-  template:
-    src: templates/rhpam70-image-streams.yaml
-    dest: /tmp/{{guid}}/rhpam70-image-streams.yaml
 - name: Load pam imagestream
-  shell: "oc create -f /tmp/{{guid}}/rhpam70-image-streams.yaml -n {{ocp_project}}"
+  shell: "oc create -f {{pam_imagestreams_yml}} -n {{ocp_project}}"
 
 - name: Load pam secret, {{kserver_app_secret}}
   shell: |
@@ -39,17 +36,83 @@
       -p SECRET_NAME={{bcentral_app_secret}} \
       -n {{ocp_project}}
 
+- name: define sso url
+  set_fact:
+    sso_base_url: https://secure-sso-{{shared_ns}}.apps.{{ocp_domain}}
+- name: Wait for Red Hat SSO to be running
+  uri:
+    url: '{{sso_base_url}}/auth'
+    status_code: 200
+    validate_certs: no
+  register: result
+  until: result.status|default(0) == 200
+  retries: 5
+  delay: 60
+  changed_when: false
+
+# Create the realm, ignore fail for existing realm.
+- name: Get SSO token
+  shell: "curl --insecure -X POST '{{sso_base_url}}/auth/realms/master/protocol/openid-connect/token' -H 'Content-Type: application/x-www-form-urlencoded' -d 'username=keyadmin' -d 'password=keypassword' -d 'grant_type=password' -d 'client_id=admin-cli'"
+  register: token_text
+
+- set_fact: TKN={{ (token_text.stdout | from_json).access_token }}
+
+- name: Get kie-realm
+  uri:
+    url: 'https://raw.githubusercontent.com/gpe-mw-training/bxms_process_automation_lab/master/resources/kie-realm.json'
+    return_content: yes
+  register: kie_realm
+
+- name: Create kie-realm
+  uri:
+    url: '{{sso_base_url}}/auth/admin/realms'
+    method: POST
+    body: "{{kie_realm.content}}"
+    body_format: json
+    headers:
+      Content-Type: "application/json"
+      Authorization: "Bearer {{TKN}}"
+    validate_certs: no
+# Status 409 generated on "CONFLICT", when realm already exists
+    status_code: 201, 409
+
 - name: Initialize OCP resources from the project template using app_name = {{app_name}}
   shell: |
       oc new-app --name=pam-lab -n {{ocp_project}} --template={{pam_template_name}} \
       -p IMAGE_STREAM_NAMESPACE={{ocp_project}} \
-      -p IMAGE_STREAM_TAG={{pam_tag}} \ 
-      -p KIE_ADMIN_PWD={{kie_admin_passwd}} \
       -p MAVEN_REPO_URL={{MAVEN_REPO_URL}} \
       -p APPLICATION_NAME={{app_name}} \
       -p BUSINESS_CENTRAL_HTTPS_SECRET={{bcentral_app_secret}} \
       -p KIE_SERVER_HTTPS_SECRET={{kserver_app_secret}} \
+      -p KIE_ADMIN_PWD={{kie_admin_passwd}} \
+      -p KIE_SERVER_CONTROLLER_USER=adminUser \
+      -p KIE_SERVER_CONTROLLER_PWD={{kie_admin_passwd}} \
+      -p SSO_URL={{sso_base_url}}/auth \
+      -p SSO_REALM=kie-realm \
+      -p BUSINESS_CENTRAL_SSO_CLIENT={{ocp_project}}-bc \
+      -p BUSINESS_CENTRAL_SSO_SECRET={{ocp_project}}-bc-secret \
+      -p KIE_SERVER_SSO_CLIENT={{ocp_project}}-ks \
+      -p KIE_SERVER_SSO_SECRET={{ocp_project}}-ks-secret \
+      -p SSO_USERNAME=admin \
+      -p SSO_PASSWORD=admin1234 \
+      -p SSO_DISABLE_SSL_CERTIFICATE_VALIDATION=true \
+      -p BUSINESS_CENTRAL_HOSTNAME_HTTP={{app_name}}-rhpamcentr-{{ocp_project}}.apps.{{ocp_domain}} \
+      -p BUSINESS_CENTRAL_HOSTNAME_HTTPS=secure-{{app_name}}-rhpamcentr-{{ocp_project}}.apps.{{ocp_domain}} \
+      -p EXECUTION_SERVER_HOSTNAME_HTTP={{app_name}}-kieserver-{{ocp_project}}.apps.{{ocp_domain}} \
+      -p EXECUTION_SERVER_HOSTNAME_HTTPS=secure-{{app_name}}-kieserver-{{ocp_project}}.apps.{{ocp_domain}} \
       -n {{ocp_project}} > /tmp/{{guid}}/gpte-pam-lab.txt
+
+# Do not cancel, just pause, it will be modified next.
+- name: pause {{app_name}}-rhpamcentr
+  shell: oc rollout pause dc/{{app_name}}-rhpamcentr -n {{ocp_project}}
+
+- name: modify business central deployment for additional java options
+  shell: |
+    oc env dc/{{app_name}}-rhpamcentr -n {{ocp_project}} \
+    JAVA_OPTS_APPEND='-Xms512m -Xmx1536m -XX:MetaspaceSize=128M -XX:MaxMetaspaceSize=1536m -Xrs'
+
+- name: cancel {{app_name}}-kieserver initial rollout
+  shell: oc rollout cancel dc/{{app_name}}-kieserver -n {{ocp_project}}
 
 - name: resume {{app_name}}-rhpamcentr
   shell: oc rollout resume dc/{{app_name}}-rhpamcentr -n {{ocp_project}}
@@ -59,29 +122,13 @@
     pod_to_wait:
       - "{{app_name}}-rhpamcentr"
 
-#- name: resume {{app_name}}-postgresql
-#  shell: oc rollout resume dc/{{app_name}}-postgresql-1 dc/{{app_name}}-postgresql-2 -n {{ocp_project}}
-#- include_tasks: ./wait_for_deploy.yml
-#  static: no
-#  vars:
-#    pod_to_wait:
-#      - {{app_name}}-postgresql-1
-
 - name: resume {{app_name}}-kieserver
-  shell: oc rollout resume dc/{{app_name}}-kieserver -n {{ocp_project}}
+  shell: oc deploy --latest dc/{{app_name}}-kieserver -n {{ocp_project}}
 - include_tasks: ./wait_for_deploy.yml
   static: no
   vars:
     pod_to_wait:
       - "{{app_name}}-kieserver"
-
-#- name: resume {{app_name}}-smartrouter
-#  shell: oc rollout resume dc/{{app_name}}-smartrouter -n {{ocp_project}}
-#- include_tasks: ./wait_for_deploy.yml
-#  static: no
-#  vars:
-#    pod_to_wait:
-#      - {{app_name}}-smartrouter
 
 - name: Annotate the empty project as requested by user
   shell: "oc annotate namespace {{ocp_project}} openshift.io/requester={{ocp_username}} --overwrite"

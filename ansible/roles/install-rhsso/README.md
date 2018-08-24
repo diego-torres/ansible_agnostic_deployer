@@ -26,7 +26,7 @@ Example Playbook
 ```yaml
   - hosts: masters
     roles:
-    - role: "{{ ANSIBLE_REPO_PATH }}/roles/install-nexus"
+    - role: "{{ ANSIBLE_REPO_PATH }}/roles/install-rhsso"
       shared_ns: "{{admin_project}}"
       when: install_sso|bool
 ```
