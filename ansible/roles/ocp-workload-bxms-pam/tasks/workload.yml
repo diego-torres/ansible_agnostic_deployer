@@ -25,6 +25,7 @@
 - name: Load pam imagestream
   shell: "oc create -f {{pam_imagestreams_yml}} -n {{ocp_project}}"
 
+
 - name: Load pam secret, {{kserver_app_secret}}
   shell: |
       oc new-app --template={{pam_secrets_template_name}} \
@@ -80,13 +81,9 @@
   shell: |
       oc new-app --name=pam-lab -n {{ocp_project}} --template={{pam_template_name}} \
       -p IMAGE_STREAM_NAMESPACE={{ocp_project}} \
-      -p MAVEN_REPO_URL={{MAVEN_REPO_URL}} \
       -p APPLICATION_NAME={{app_name}} \
       -p BUSINESS_CENTRAL_HTTPS_SECRET={{bcentral_app_secret}} \
       -p KIE_SERVER_HTTPS_SECRET={{kserver_app_secret}} \
-      -p KIE_ADMIN_PWD={{kie_admin_passwd}} \
-      -p KIE_SERVER_CONTROLLER_USER=adminUser \
-      -p KIE_SERVER_CONTROLLER_PWD={{kie_admin_passwd}} \
       -p SSO_URL={{sso_base_url}}/auth \
       -p SSO_REALM=kie-realm \
       -p BUSINESS_CENTRAL_SSO_CLIENT={{ocp_project}}-bc \
