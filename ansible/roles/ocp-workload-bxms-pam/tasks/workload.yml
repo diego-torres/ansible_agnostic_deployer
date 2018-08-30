@@ -101,18 +101,13 @@
 
 # Do not cancel, just pause, it will be modified next.
 - name: pause {{app_name}}-rhpamcentr
-  shell: oc rollout pause dc/{{app_name}}-rhpamcentr -n {{ocp_project}}
-
-- name: modify business central deployment for additional java options
-  shell: |
-    oc env dc/{{app_name}}-rhpamcentr -n {{ocp_project}} \
-    JAVA_OPTS_APPEND='-Xms512m -Xmx1536m -XX:MetaspaceSize=128M -XX:MaxMetaspaceSize=1536m -Xrs'
+  shell: oc rollout cancel dc/{{app_name}}-rhpamcentr -n {{ocp_project}}
 
 - name: cancel {{app_name}}-kieserver initial rollout
   shell: oc rollout cancel dc/{{app_name}}-kieserver -n {{ocp_project}}
 
 - name: resume {{app_name}}-rhpamcentr
-  shell: oc rollout resume dc/{{app_name}}-rhpamcentr -n {{ocp_project}}
+  shell: oc rollout --latest dc/{{app_name}}-rhpamcentr -n {{ocp_project}}
 - include_tasks: ./wait_for_deploy.yml
   static: no
   vars:
@@ -120,7 +115,7 @@
       - "{{app_name}}-rhpamcentr"
 
 - name: resume {{app_name}}-kieserver
-  shell: oc deploy --latest dc/{{app_name}}-kieserver -n {{ocp_project}}
+  shell: oc rollout --latest dc/{{app_name}}-kieserver -n {{ocp_project}}
 - include_tasks: ./wait_for_deploy.yml
   static: no
   vars:
