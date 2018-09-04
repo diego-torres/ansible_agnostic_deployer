@@ -28,8 +28,8 @@ ansible-playbook -i localhost, -c local ./configs/ocp-workloads/ocp-workload.yml
                     -e"ocp_workload=${WORKLOAD}" \
                     -e"guid=$GUID" \
                     -e"ACTION=remove" \
-                    -e"ocp_username=dtorresf-redhat.com" \
-                    -e"sso_required=false"
+                    -e"ocp_username=dtorresf-redhat.com"\
+                    -e"sso_required=true"
 -----
 
 

@@ -12,19 +12,50 @@
 - name: Make sure we go back to default project
   shell: "oc project default"
 
+<<<<<<< HEAD
 - name: Initialize the project templates, {{pam_template_yml}}
   shell: "oc create -f {{pam_template_yml}} -n {{ocp_project}}"
 - name: Initialize the project secrets, {{pam_secrets_yml}}
   shell: "oc create -f {{pam_secrets_yml}} -n {{ocp_project}}"
 
+=======
+>>>>>>> development
 - name: Prep local filesystem for temp files
   file:
     path: "/tmp/{{guid}}"
     state: directory
 
+- name: Prepare a local copy of the template for modifications
+  shell: "oc process -f {{pam_template_yml}} \
+      -p IMAGE_STREAM_NAMESPACE={{ocp_project}} \
+      -p APPLICATION_NAME={{app_name}} \
+      -p BUSINESS_CENTRAL_HTTPS_SECRET={{bcentral_app_secret}} \
+      -p KIE_SERVER_HTTPS_SECRET={{kserver_app_secret}} \
+      -p SSO_URL={{sso_base_url}}/auth \
+      -p SSO_REALM=kie-realm \
+      -p BUSINESS_CENTRAL_SSO_CLIENT={{ocp_project}}-bc \
+      -p BUSINESS_CENTRAL_SSO_SECRET={{ocp_project}}-bc-secret \
+      -p KIE_SERVER_SSO_CLIENT={{ocp_project}}-ks \
+      -p KIE_SERVER_SSO_SECRET={{ocp_project}}-ks-secret \
+      -p SSO_USERNAME=admin \
+      -p SSO_PASSWORD=admin1234 \
+      -p SSO_DISABLE_SSL_CERTIFICATE_VALIDATION=true \
+      -p BUSINESS_CENTRAL_HOSTNAME_HTTP={{app_name}}-rhpamcentr-{{ocp_project}}.apps.{{ocp_domain}} \
+      -p BUSINESS_CENTRAL_HOSTNAME_HTTPS=secure-{{app_name}}-rhpamcentr-{{ocp_project}}.apps.{{ocp_domain}} \
+      -p EXECUTION_SERVER_HOSTNAME_HTTP={{app_name}}-kieserver-{{ocp_project}}.apps.{{ocp_domain}} \
+      -p EXECUTION_SERVER_HOSTNAME_HTTPS=secure-{{app_name}}-kieserver-{{ocp_project}}.apps.{{ocp_domain}} > /tmp/{{guid}}/{{pam_template_name}}.json"
+
+- name: Modify template with pause build configs
+  replace:
+    path: '/tmp/{{guid}}/{{pam_template_name}}.json'
+    regexp: '("replicas": 1,\n)'
+    replace: '\1\t\t\t\t\t"paused": true,\n'
+
+- name: Create template for secrets {{pam_secrets_yml}}
+  shell: "oc create -f {{pam_secrets_yml}} -n {{ocp_project}}"
+
 - name: Load pam imagestream
   shell: "oc create -f {{pam_imagestreams_yml}} -n {{ocp_project}}"
-
 
 - name: Load pam secret, {{kserver_app_secret}}
   shell: |
@@ -78,44 +109,33 @@
     status_code: 201, 409
 
 - name: Initialize OCP resources from the project template using app_name = {{app_name}}
-  shell: |
-      oc new-app --name=pam-lab -n {{ocp_project}} --template={{pam_template_name}} \
-      -p IMAGE_STREAM_NAMESPACE={{ocp_project}} \
-      -p APPLICATION_NAME={{app_name}} \
-      -p BUSINESS_CENTRAL_HTTPS_SECRET={{bcentral_app_secret}} \
-      -p KIE_SERVER_HTTPS_SECRET={{kserver_app_secret}} \
-      -p SSO_URL={{sso_base_url}}/auth \
-      -p SSO_REALM=kie-realm \
-      -p BUSINESS_CENTRAL_SSO_CLIENT={{ocp_project}}-bc \
-      -p BUSINESS_CENTRAL_SSO_SECRET={{ocp_project}}-bc-secret \
-      -p KIE_SERVER_SSO_CLIENT={{ocp_project}}-ks \
-      -p KIE_SERVER_SSO_SECRET={{ocp_project}}-ks-secret \
-      -p SSO_USERNAME=admin \
-      -p SSO_PASSWORD=admin1234 \
-      -p SSO_DISABLE_SSL_CERTIFICATE_VALIDATION=true \
-      -p BUSINESS_CENTRAL_HOSTNAME_HTTP={{app_name}}-rhpamcentr-{{ocp_project}}.apps.{{ocp_domain}} \
-      -p BUSINESS_CENTRAL_HOSTNAME_HTTPS=secure-{{app_name}}-rhpamcentr-{{ocp_project}}.apps.{{ocp_domain}} \
-      -p EXECUTION_SERVER_HOSTNAME_HTTP={{app_name}}-kieserver-{{ocp_project}}.apps.{{ocp_domain}} \
-      -p EXECUTION_SERVER_HOSTNAME_HTTPS=secure-{{app_name}}-kieserver-{{ocp_project}}.apps.{{ocp_domain}} \
-      -n {{ocp_project}} > /tmp/{{guid}}/gpte-pam-lab.txt
-
-# Do not cancel, just pause, it will be modified next.
-- name: pause {{app_name}}-rhpamcentr
-  shell: oc rollout cancel dc/{{app_name}}-rhpamcentr -n {{ocp_project}}
-
-- name: cancel {{app_name}}-kieserver initial rollout
-  shell: oc rollout cancel dc/{{app_name}}-kieserver -n {{ocp_project}}
+  shell: "oc create -f /tmp/{{guid}}/{{pam_template_name}}.json -n {{ocp_project}}"
 
 - name: resume {{app_name}}-rhpamcentr
-  shell: oc rollout --latest dc/{{app_name}}-rhpamcentr -n {{ocp_project}}
+  shell: oc rollout resume dc/{{app_name}}-rhpamcentr -n {{ocp_project}}
+
 - include_tasks: ./wait_for_deploy.yml
   static: no
   vars:
     pod_to_wait:
       - "{{app_name}}-rhpamcentr"
 
+# Modify kieserver to include required data products information
+- name: Download products data file
+  get_url:
+    url: '{{products_data}}'
+    dest: /tmp/{{guid}}/products.txt
+
+- name: Create products configmap
+  shell: oc create configmap products-cm --from-file=/tmp/{{guid}}/products.txt -n {{ocp_project}}
+
+- name: Modify kieserver to include products in a volume
+  shell: oc volume dc/{{app_name}}-kieserver -n {{ocp_project}} \
+        --overwrite --add -t configmap -m /data --name=products-volume --configmap-name=products-cm
+
 - name: resume {{app_name}}-kieserver
-  shell: oc rollout --latest dc/{{app_name}}-kieserver -n {{ocp_project}}
+  shell: oc rollout resume dc/{{app_name}}-kieserver -n {{ocp_project}}
+
 - include_tasks: ./wait_for_deploy.yml
   static: no
   vars:
