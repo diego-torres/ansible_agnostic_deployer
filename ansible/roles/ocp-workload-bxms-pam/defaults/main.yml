@@ -27,10 +27,6 @@ deploy_status_delay: 20
 
 kie_admin_passwd: test1234!
 
-# dtorresf: default for user cloudforms provision, when using for workshop use the -e MAVEN_REPO_URL option to override during playbook execution
-# value for workshop cluster: http://nexus3.default.svc.cluster.local:8081/repository/maven-public/
-MAVEN_REPO_URL: http://nexus.opentlc-shared:8081/repository/maven-public/
-
 POSTGRESQL_IMAGE_STREAM_TAG: 9.5
 pam_tag: 7.0.2.GA
 app_name: rht
@@ -46,3 +42,5 @@ pam_template_yml: https://raw.githubusercontent.com/jboss-container-images/rhpam
 pam_template_name: rhpam70-authoring
 
 products_data: https://raw.githubusercontent.com/gpe-mw-training/rhpam-order-fulfillment/master/src/main/resources/products.txt
+
+kie_realm_json: https://raw.githubusercontent.com/gpe-mw-training/bxms_process_automation_lab/master/resources/kie-realm.json 

@@ -12,6 +12,7 @@ GUID=jb45
 
 HOST_GUID=`oc whoami --show-server | cut -d'.' -f 2`
 OCP_DOMAIN=$HOST_GUID.openshift.opentlc.com
+OCP_USERNAME="jbride-redhat.com"
 
 ansible-playbook -i localhost, -c local ./configs/ocp-workloads/ocp-workload.yml \
                     -e"ANSIBLE_REPO_PATH=`pwd`" \
@@ -20,7 +21,7 @@ ansible-playbook -i localhost, -c local ./configs/ocp-workloads/ocp-workload.yml
                     -e"guid=$GUID" \
                     -e"ocp_domain=$OCP_DOMAIN" \
                     -e"ACTION=create" \
-                    -e"ocp_username=dtorresf-redhat.com" \
+                    -e"ocp_username=${OCP_USERNAME}" \
                     -e"sso_required=true"
 
 ansible-playbook -i localhost, -c local ./configs/ocp-workloads/ocp-workload.yml \
@@ -28,8 +29,8 @@ ansible-playbook -i localhost, -c local ./configs/ocp-workloads/ocp-workload.yml
                     -e"ocp_workload=${WORKLOAD}" \
                     -e"guid=$GUID" \
                     -e"ACTION=remove" \
-                    -e"ocp_username=dtorresf-redhat.com"\
-                    -e"sso_required=true"
+                    -e"ocp_username=${OCP_USERNAME}" \
+                    -e"sso_required=false"
 -----
 
 

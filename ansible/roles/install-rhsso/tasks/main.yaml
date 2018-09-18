@@ -20,8 +20,8 @@
     - name: Import RH SSO template
       shell: "oc create -f https://raw.githubusercontent.com/jboss-openshift/application-templates/{{sso_version}}/sso/sso72-mysql-persistent.json"
     - name: Create RH SSO app
-      shell: "oc new-app sso72-mysql-persistent -p HTTPS_NAME=jboss -p HTTPS_PASSWORD=mykeystorepass -p SSO_ADMIN_USERNAME=keyadmin \
-      -p SSO_ADMIN_PASSWORD=keypassword -n {{shared_ns}}"
+      shell: "oc new-app sso72-mysql-persistent -p HTTPS_NAME=jboss -p HTTPS_PASSWORD=mykeystorepass -p SSO_ADMIN_USERNAME=admin \
+      -p SSO_ADMIN_PASSWORD=admin1234 -n {{shared_ns}}"
     - name: Wait for Red Hat SSO to be running
       command: "oc get dc/sso -o yaml -n {{shared_ns}}"
       register: result

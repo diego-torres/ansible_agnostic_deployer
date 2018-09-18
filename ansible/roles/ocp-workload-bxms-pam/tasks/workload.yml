@@ -12,44 +12,56 @@
 - name: Make sure we go back to default project
   shell: "oc project default"
 
-<<<<<<< HEAD
-- name: Initialize the project templates, {{pam_template_yml}}
-  shell: "oc create -f {{pam_template_yml}} -n {{ocp_project}}"
-- name: Initialize the project secrets, {{pam_secrets_yml}}
-  shell: "oc create -f {{pam_secrets_yml}} -n {{ocp_project}}"
-
-=======
->>>>>>> development
 - name: Prep local filesystem for temp files
   file:
     path: "/tmp/{{guid}}"
     state: directory
 
-- name: Prepare a local copy of the template for modifications
-  shell: "oc process -f {{pam_template_yml}} \
-      -p IMAGE_STREAM_NAMESPACE={{ocp_project}} \
-      -p APPLICATION_NAME={{app_name}} \
-      -p BUSINESS_CENTRAL_HTTPS_SECRET={{bcentral_app_secret}} \
-      -p KIE_SERVER_HTTPS_SECRET={{kserver_app_secret}} \
-      -p SSO_URL={{sso_base_url}}/auth \
-      -p SSO_REALM=kie-realm \
-      -p BUSINESS_CENTRAL_SSO_CLIENT={{ocp_project}}-bc \
-      -p BUSINESS_CENTRAL_SSO_SECRET={{ocp_project}}-bc-secret \
-      -p KIE_SERVER_SSO_CLIENT={{ocp_project}}-ks \
-      -p KIE_SERVER_SSO_SECRET={{ocp_project}}-ks-secret \
-      -p SSO_USERNAME=admin \
-      -p SSO_PASSWORD=admin1234 \
-      -p SSO_DISABLE_SSL_CERTIFICATE_VALIDATION=true \
-      -p BUSINESS_CENTRAL_HOSTNAME_HTTP={{app_name}}-rhpamcentr-{{ocp_project}}.apps.{{ocp_domain}} \
-      -p BUSINESS_CENTRAL_HOSTNAME_HTTPS=secure-{{app_name}}-rhpamcentr-{{ocp_project}}.apps.{{ocp_domain}} \
-      -p EXECUTION_SERVER_HOSTNAME_HTTP={{app_name}}-kieserver-{{ocp_project}}.apps.{{ocp_domain}} \
-      -p EXECUTION_SERVER_HOSTNAME_HTTPS=secure-{{app_name}}-kieserver-{{ocp_project}}.apps.{{ocp_domain}} > /tmp/{{guid}}/{{pam_template_name}}.json"
+- name: define sso url
+  set_fact:
+    sso_base_url: https://secure-sso-{{shared_ns}}.apps.{{ocp_domain}}
+- name: Wait for Red Hat SSO to be running
+  uri:
+    url: '{{sso_base_url}}/auth'
+    status_code: 200
+    validate_certs: no
+  register: result
+  until: result.status|default(0) == 200
+  retries: 5
+  delay: 60
+  changed_when: false
 
-- name: Modify template with pause build configs
-  replace:
-    path: '/tmp/{{guid}}/{{pam_template_name}}.json'
-    regexp: '("replicas": 1,\n)'
-    replace: '\1\t\t\t\t\t"paused": true,\n'
+# Create the realm, ignore fail for existing realm.
+- name: Get SSO token
+  shell: "curl --insecure -X POST '{{sso_base_url}}/auth/realms/master/protocol/openid-connect/token' -H 'Content-Type: application/x-www-form-urlencoded' -d 'username=admin' -d 'password=admin1234' -d 'grant_type=password' -d 'client_id=admin-cli'"
+  register: token_text
+
+- debug:
+    msg: "{{sso_base_url}}/auth responded with token: \n {{token_text.stdout}}"
+
+- set_fact: TKN={{ (token_text.stdout | from_json).access_token }}
+
+- name: Get kie-realm
+  uri:
+    url: '{{kie_realm_json}}'
+    return_content: yes
+  register: kie_realm
+
+- name: Create kie-realm
+  uri:
+    url: '{{sso_base_url}}/auth/admin/realms'
+    method: POST
+    body: "{{kie_realm.content}}"
+    body_format: json
+    headers:
+      Content-Type: "application/json"
+      Authorization: "Bearer {{TKN}}"
+    validate_certs: no
+# Status 409 generated on "CONFLICT", when realm already exists
+    status_code: 201, 409
+
+- name: Create PAM template
+  shell: "oc create -f {{pam_template_yml}} -n {{ocp_project}}"
 
 - name: Create template for secrets {{pam_secrets_yml}}
   shell: "oc create -f {{pam_secrets_yml}} -n {{ocp_project}}"
@@ -68,45 +80,35 @@
       -p SECRET_NAME={{bcentral_app_secret}} \
       -n {{ocp_project}}
 
-- name: define sso url
-  set_fact:
-    sso_base_url: https://secure-sso-{{shared_ns}}.apps.{{ocp_domain}}
-- name: Wait for Red Hat SSO to be running
-  uri:
-    url: '{{sso_base_url}}/auth'
-    status_code: 200
-    validate_certs: no
-  register: result
-  until: result.status|default(0) == 200
-  retries: 5
-  delay: 60
-  changed_when: false
+- name: Prepare a local copy of the template for modifications
+  shell: |
+    oc process -f {{pam_template_yml}} \
+      -p IMAGE_STREAM_NAMESPACE={{ocp_project}} \
+      -p APPLICATION_NAME={{app_name}} \
+      -p KIE_ADMIN_PWD={{kie_admin_passwd}} \
+      -p KIE_SERVER_CONTROLLER_PWD={{kie_admin_passwd}} \
+      -p BUSINESS_CENTRAL_HTTPS_SECRET={{bcentral_app_secret}} \
+      -p KIE_SERVER_HTTPS_SECRET={{kserver_app_secret}} \
+      -p SSO_URL={{sso_base_url}}/auth \
+      -p SSO_REALM=kie-realm \
+      -p BUSINESS_CENTRAL_SSO_CLIENT={{ocp_project}}-bc \
+      -p BUSINESS_CENTRAL_SSO_SECRET={{ocp_project}}-bc-secret \
+      -p KIE_SERVER_SSO_CLIENT={{ocp_project}}-ks \
+      -p KIE_SERVER_SSO_SECRET={{ocp_project}}-ks-secret \
+      -p SSO_USERNAME=admin \
+      -p SSO_PASSWORD=admin1234 \
+      -p SSO_DISABLE_SSL_CERTIFICATE_VALIDATION=true \
+      -p BUSINESS_CENTRAL_HOSTNAME_HTTP={{app_name}}-rhpamcentr-{{ocp_project}}.apps.{{ocp_domain}} \
+      -p BUSINESS_CENTRAL_HOSTNAME_HTTPS=secure-{{app_name}}-rhpamcentr-{{ocp_project}}.apps.{{ocp_domain}} \
+      -p EXECUTION_SERVER_HOSTNAME_HTTP={{app_name}}-kieserver-{{ocp_project}}.apps.{{ocp_domain}} \
+      -p EXECUTION_SERVER_HOSTNAME_HTTPS=secure-{{app_name}}-kieserver-{{ocp_project}}.apps.{{ocp_domain}} > /tmp/{{guid}}/{{pam_template_name}}.json
 
-# Create the realm, ignore fail for existing realm.
-- name: Get SSO token
-  shell: "curl --insecure -X POST '{{sso_base_url}}/auth/realms/master/protocol/openid-connect/token' -H 'Content-Type: application/x-www-form-urlencoded' -d 'username=keyadmin' -d 'password=keypassword' -d 'grant_type=password' -d 'client_id=admin-cli'"
-  register: token_text
+- name: Modify template with pause build configs
+  replace:
+    path: '/tmp/{{guid}}/{{pam_template_name}}.json'
+    regexp: '("replicas": 1,\n)'
+    replace: '\1\t\t\t\t\t"paused": true,\n'
 
-- set_fact: TKN={{ (token_text.stdout | from_json).access_token }}
-
-- name: Get kie-realm
-  uri:
-    url: 'https://raw.githubusercontent.com/gpe-mw-training/bxms_process_automation_lab/master/resources/kie-realm.json'
-    return_content: yes
-  register: kie_realm
-
-- name: Create kie-realm
-  uri:
-    url: '{{sso_base_url}}/auth/admin/realms'
-    method: POST
-    body: "{{kie_realm.content}}"
-    body_format: json
-    headers:
-      Content-Type: "application/json"
-      Authorization: "Bearer {{TKN}}"
-    validate_certs: no
-# Status 409 generated on "CONFLICT", when realm already exists
-    status_code: 201, 409
 
 - name: Initialize OCP resources from the project template using app_name = {{app_name}}
   shell: "oc create -f /tmp/{{guid}}/{{pam_template_name}}.json -n {{ocp_project}}"
