@@ -44,8 +44,8 @@ qe_quay_ssl_lets_encrypt_certs: False
 qe_quay_ssl_lets_encrypt_production: False
 qe_quay_ssl_lets_encrypt_force_renew: False
 qe_quay_ssl_lets_encrypt_renew_automatically: False
-qe_quay_ssl_key_file: "{{ANSIBLE_REPO_PATH}}/workdir/{{guid}}.key"
-qe_quay_ssl_cert_file: "{{ANSIBLE_REPO_PATH}}/workdir/{{guid}}.cert"
+#qe_quay_ssl_key_file: "{{ANSIBLE_REPO_PATH}}/workdir/{{guid}}.key"
+#qe_quay_ssl_cert_file: "{{ANSIBLE_REPO_PATH}}/workdir/{{guid}}.cert"
 # qe_quay_superuser_username: quayadmin
 # qe_quay_superuser_password: quaypwd
 # qe_quay_superuser_email: quayadmin@dummy.com
@@ -126,10 +126,10 @@ rhel_repos:
 
 project_tag: "{{ env_type }}-{{ guid }}"
 
-create_internal_dns_entries: false
+
 zone_internal_dns: "{{guid}}.internal."
 chomped_zone_internal_dns: "{{guid}}.internal"
-zone_public_dns: "{{subdomain_base}}."
+
 
 bastion_public_dns: "bastion.{{subdomain_base}}."
 bastion_public_dns_chomped: "bastion.{{subdomain_base}}"

@@ -1,12 +1,12 @@
 #vim: set ft=ansible:
 ---
+
 - name: Install Openshift Client VM packages
   yum:
     name: "{{ item }}"
     state: present
   with_items:
   - java-1.8.0-openjdk-devel
-  - maven
   - docker
   - atomic-openshift-clients
   - skopeo
@@ -16,6 +16,35 @@
   - cri-o
   - cri-tools
   - podman
+  tags:
+  - install_openshift_client_vm_packages
+
+
+- name: Get recent version of maven
+  get_url:
+    url: http://www-eu.apache.org/dist/maven/maven-3/3.5.4/binaries/apache-maven-3.5.4-bin.tar.gz
+    dest: /root/apache-maven.tar.gz
+  register: r_geturl
+  retries: 5
+  delay: 20
+  until: r_geturl is succeeded
+  tags:
+  - install_openshift_client_vm_packages
+- name: Unarchive file
+  unarchive:
+    remote_src: yes
+    src: /root/apache-maven.tar.gz
+    dest: /root/
+  tags:
+  - install_openshift_client_vm_packages
+- name: Move maven to /usr/local
+  command: mv /root/apache-maven-3.5.4 /usr/local
+  tags:
+  - install_openshift_client_vm_packages
+- name: Cleanup downloaded file
+  file:
+    dest: /root/apache-maven.tar.gz
+    state: absent
   tags:
   - install_openshift_client_vm_packages
 
@@ -66,6 +95,48 @@
 - name: Cleanup downloaded file
   file:
     dest: /root/s2i.tar.gz
+    state: absent
+  tags:
+  - install_openshift_client_vm_packages
+
+- name: Get community istioctl utility
+  get_url:
+    url: https://github.com/istio/istio/releases/download/1.0.0/istio-1.0.0-linux.tar.gz
+    dest: /root/istio-1.0.0-linux.tar.gz
+  register: r_geturl
+  retries: 5
+  delay: 20
+  until: r_geturl is succeeded
+  tags:
+  - install_openshift_client_vm_packages
+
+- name: Unarchive file
+  unarchive:
+    remote_src: yes
+    src: /root/istio-1.0.0-linux.tar.gz
+    dest: /root/
+  tags:
+  - install_openshift_client_vm_packages
+
+- name: Move istioctl to /usr/local/bin
+  copy:
+    remote_src: yes
+    src: /root/istio-1.0.0/bin/istioctl
+    dest: /usr/local/bin/istioctl
+    group: root
+    owner: root
+    mode: 0755
+  tags:
+  - install_openshift_client_vm_packages
+- name: Cleanup Temp Directory
+  file:
+    dest: /root/istio-1.0.0
+    state: absent
+  tags:
+  - install_openshift_client_vm_packages
+- name: Cleanup downloaded file
+  file:
+    dest: /root/istio-1.0.0-linux.tar.gz
     state: absent
   tags:
   - install_openshift_client_vm_packages

@@ -90,9 +90,30 @@
     - "{{ ANSIBLE_REPO_PATH }}/configs/{{ env_type }}/env_secret_vars.yml"
   roles:
     - { role: "{{ ANSIBLE_REPO_PATH }}/roles/bastion", when: 'install_bastion' }
+    - { role: "{{ ANSIBLE_REPO_PATH }}/roles/bastion-student-user", when: student_password is defined }
+  tasks:
+    - name: Populate /etc/hosts with internaldns to relief route53
+      lineinfile:
+        dest: /etc/hosts
+        regexp: "{{ hostvars[item].internaldns }}$"
+        line: "{{ hostvars[item].private_ip_address}} {{ hostvars[item].internaldns }}"
+      when: item not in [ 'localhost' ]
+      with_items: "{{ groups['all'] }}"
+
+- name: Configuring Bastion Hosts
+  hosts: clientvms
+  become: true
+  gather_facts: false
+  vars_files:
+    - "{{ ANSIBLE_REPO_PATH }}/configs/{{ env_type }}/env_vars.yml"
+    - "{{ ANSIBLE_REPO_PATH }}/configs/{{ env_type }}/env_secret_vars.yml"
+  roles:
+    - { role: "{{ ANSIBLE_REPO_PATH }}/roles/bastion-student-user", when: student_password is defined }
+    - { role: "{{ ANSIBLE_REPO_PATH }}/roles/ocp-client-vm", when: 'install_clientvm' }
   tags:
     - step004
     - bastion_tasks
+    - clientvms
 
 - name: PreSoftware flight-check
   hosts: localhost
