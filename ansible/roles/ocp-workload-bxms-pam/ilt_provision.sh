@@ -60,8 +60,9 @@ function executeLoop() {
 
 function executeAnsible() {
     TARGET_HOST="bastion.$HOST_GUID.openshift.opentlc.com"
-    SSH_USERNAME="jbride-redhat.com"
-    SSH_PRIVATE_KEY="id_ocp"
+    SSH_USERNAME="dtorresf-redhat.com"
+    SSH_PRIVATE_KEY="id_rsa"
+    PROJECT_PREFIX="rhpam"
 
     # NOTE:  Ensure you have ssh'd (as $SSH_USERNMAE) into the bastion node of your OCP cluster environment at $TARGET_HOST and logged in using opentlc-mgr account:
     #           oc login https://master.$HOST_GUID.openshift.opentlc.com -u opentlc-mgr
@@ -81,6 +82,7 @@ function executeAnsible() {
                     -e"ocp_user_needs_quota=true" \
                     -e"ocp_apps_domain=apps.${HOST_GUID}.openshift.opentlc.com" \
                     -e"ACTION=create" >> $LOG_FILE
+
     if [ $? -ne 0 ];
     then
         echo -en "\n\n*** Error provisioning where GUID = $GUID\n\n " >> $LOG_FILE
@@ -94,4 +96,3 @@ function executeAnsible() {
 ensurePreReqs
 login
 executeLoop
-
